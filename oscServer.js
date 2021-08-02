@@ -11,6 +11,10 @@ let app = express();
 app.use(express.static('./public'));
 app.use(express.static('./node_modules'));
 
+if (process.pid) {
+  logger.info('This process is your PID ' + process.pid);
+}
+
 const webServer = require('http').createServer(app)
 let serverOptions = {
     cors: {
@@ -18,6 +22,7 @@ let serverOptions = {
         // origin: "http://192.168.0.4:3001/*.html",
     }
 }
+
 let io = require('socket.io')(webServer, serverOptions);
 io.sockets.on('connection', newConnection);
 webServer.listen(socketsPort, serverHost)
@@ -25,16 +30,24 @@ logger.info('Logging Level', logger.level.levelStr)
 logger.info(`Server listening on ${serverHost}:${socketsPort}`)
 
 const osc = require('osc')
-let udpPort = new osc.UDPPort({
+let udpSocket = new osc.UDPPort({
     localAddress: serverHost,
     localPort: udpPort,
     metadata: true
 });
-udpPort.on("message", function (oscMsg, timeTag, info) {
-    console.log("An OSC message just arrived!", oscMsg);
-    console.log("Remote info is: ", info);
+udpSocket.on("message", function (oscMsg, timeTag, info) {
+    logger.info("osc message received: ", JSON.stringify(oscMsg, null, 2))
+    logger.info("from: ", JSON.stringify(info, null, 2))
 });
-udpPort.open();
+udpSocket.open();
+
+const midi = require('midi')
+const midiInput = new midi.Input();
+logger.info(midiInput.getPortCount());
+logger.info(midiInput.getPortName(0));
+
+midiInput.on('message', handleMidiMessage);
+midiInput.openPort(0)
 
 function newConnection(socket) {
     logger.info(`new connection, ID: ${socket.id}  Remote Address: ${socket.client.conn.remoteAddress}`);
@@ -42,29 +55,26 @@ function newConnection(socket) {
     // socket.emit('updateMessage', initialMessage);
 }
 
+function handleMidiMessage(deltaTime, message) {
+    logger.info(`received midi message: ${message} deltaTime: ${deltaTime}`)
+}
 
-// const serverHost = "localhost";
-// const touchOscHost = config.touchOscHost;
-// const authorizedClients = config.authorizedClients;
+process.on('SIGTERM', async () => {
+    logger.info('SIGTERM signal received.');
+    logger.info("Closing web server.")
+    await webServer.close()
+    logger.info("Closing Udp socket.")
+    await udpSocket.close();
+    logger.info("Closing midi port.")
+    await midiInput.closePort();
+    logger.info("Killing server.")
+    process.exit(0);
+});
 
-
-// const pureDataOutPort = config.ports.pureDataOut;
-// const pureDataInPort = config.ports.pureDataIn;
-// const touchOscOutPort = config.ports.touchOscOut;
-// const touchOscInPort = config.ports.touchOscIn;
-
-// let pureDataServer = new nodeOsc.Server(pureDataInPort, serverHost);
-// let pureDataClient = new nodeOsc.Client(serverHost, pureDataOutPort);
-// let touchOscServer = new nodeOsc.Server(touchOscInPort, serverHost);
-// let touchOscClient = new nodeOsc.Client(touchOscHost, touchOscOutPort);
 
 // let threshold = 0;
 
 
-// let io = socket;
-// io.set('origins', `http://${authorizedClients[0]}:3001/*.html`, `http://${authorizedClients[1]}:3001/*.html`);
-
-// io.sockets.on('connection', newConnection);
 
 // pureDataServer.on('message', handlePureDataOscMessage);
 // touchOscServer.on('message', handleTouchOscMessage);
