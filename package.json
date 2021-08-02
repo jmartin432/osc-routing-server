@@ -4,6 +4,7 @@
   "description": "a server for routing osc message between connected devices",
   "main": "oscServer.js",
   "scripts": {
+    "start": "node oscServer.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
