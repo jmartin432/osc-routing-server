@@ -12,16 +12,11 @@ app.use(express.static('./public'));
 app.use(express.static('./node_modules'));
 
 if (process.pid) {
-  logger.info('This process is your PID ' + process.pid);
+  logger.info(`This process is PID ${process.pid}`);
 }
 
 const webServer = require('http').createServer(app)
-let serverOptions = {
-    cors: {
-        origin: "*:*",
-        // origin: "http://192.168.0.4:3001/*.html",
-    }
-}
+let serverOptions = config.serverOptions
 
 let io = require('socket.io')(webServer, serverOptions);
 io.sockets.on('connection', newConnection);
@@ -30,24 +25,27 @@ logger.info('Logging Level', logger.level.levelStr)
 logger.info(`Server listening on ${serverHost}:${socketsPort}`)
 
 const osc = require('osc')
-let udpSocket = new osc.UDPPort({
-    localAddress: serverHost,
-    localPort: udpPort,
-    metadata: true
-});
-udpSocket.on("message", function (oscMsg, timeTag, info) {
-    logger.info("osc message received: ", JSON.stringify(oscMsg, null, 2))
-    logger.info("from: ", JSON.stringify(info, null, 2))
-});
-udpSocket.open();
+try {
+    let udpSocket = new osc.UDPPort({
+        localAddress: serverHost,
+        localPort: udpPort,
+        metadata: true
+    });
+    udpSocket.on("message", function (oscMsg, timeTag, info) {
+        logger.info("osc message received: ", JSON.stringify(oscMsg, null, 2))
+        logger.info("from: ", JSON.stringify(info, null, 2))
+    });
+} catch (e) {
+    throw new Error('Unable to open UDP Socket')
+}
 
 const midi = require('midi')
 const midiInput = new midi.Input();
-logger.info(midiInput.getPortCount());
-logger.info(midiInput.getPortName(0));
-
+logger.info(`found ${midiInput.getPortCount()} midi ports`);
+for (let i = 0; i < midiInput.getPortCount(); i++) {
+    logger.info(`Midi port ${i}: ${midiInput.getPortName(i)}`);
+}
 midiInput.on('message', handleMidiMessage);
-midiInput.openPort(0)
 
 function newConnection(socket) {
     logger.info(`new connection, ID: ${socket.id}  Remote Address: ${socket.client.conn.remoteAddress}`);
@@ -70,6 +68,11 @@ process.on('SIGTERM', async () => {
     logger.info("Killing server.")
     process.exit(0);
 });
+
+process.on('uncaughtException', err => {
+  console.error('There was an uncaught error', err)
+  process.exit(1)
+})
 
 
 // let threshold = 0;
